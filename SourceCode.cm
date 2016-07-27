@@ -1,0 +1,157 @@
+// Angel R. Roman
+// 7/26/2016
+
+//Constants
+const int BUFFERSIZE1 = 1;
+const int BUFFERSIZE2 = 5;
+const int EMPTY = 0;
+const int LOOP = 25;
+const int RANGE = 200;
+const int DUMMYLOOP = 20;
+
+//Semaphores
+semaphore full1;
+semaphore full2;
+semaphore full3;
+semaphore mutex1;
+semaphore mutex2;
+semaphore mutex3;
+semaphore output;
+semaphore pio;
+semaphore sio;
+semaphore operationComplete;
+semaphore requestPending;
+semaphore requestServiced[BUFFERSIZE2];
+
+//Buffers
+int iorqID[BUFFERSIZE2];
+int iorqAddr[BUFFERSIZE2];
+int userAddr = EMPTY;
+int userID = EMPTY;
+int track = EMPTY;
+
+void Disk() {
+	int dummyCount = EMPTY;
+	int seek = EMPTY;
+	int dAddr = EMPTY;
+	int count = EMPTY;	
+	for (count = EMPTY; count < LOOP; count++){
+		p(pio);
+		p(mutex3);
+		dAddr = track;
+		v(mutex3);
+		seek = dAddr * DUMMYLOOP;
+		for (dummyCount = EMPTY; dummyCount < seek; dummyCount++){
+		}
+		v(operationComplete);		
+		p(output);
+		cout << "Disk Completes I/O operation " << count + 1 << endl;
+		v(output);
+		v(full3);
+	}	
+}
+
+void DeviceDriver() {
+	int numberInBuffer2 = EMPTY;
+	int ddAddr = EMPTY;
+	int ddID = EMPTY;
+	int count = EMPTY;	
+	for (count = EMPTY; count < LOOP; count++){
+		p(requestPending);
+		p(mutex2);
+		ddID = iorqID[numberInBuffer2];
+		ddAddr = iorqAddr[numberInBuffer2];
+		numberInBuffer2 = (numberInBuffer2++) % 5;
+		v(mutex2);
+		v(full2);
+		p(full3);
+		p(mutex3);
+		track = ddAddr;
+		v(mutex3);
+		v(pio);
+		p(output);
+		cout << "Driver initiates I/O operation for user " << count + 1 << endl;
+		v(output);
+		p(operationComplete);
+		v(requestServiced[ddID]);
+		p(output);
+		cout << "Driver signal user " << ddID << endl;
+		v(output);
+	}
+}
+
+
+void Doio() {
+	int numberInBuffer = EMPTY;
+	int doioID = EMPTY;
+	int doioAddr = EMPTY;
+	int count = EMPTY;
+	for (count = EMPTY; count < LOOP; count++){
+		p(sio);
+		p(mutex1);
+		doioID = userID;
+		doioAddr = userAddr;
+		v(mutex1);
+		v(full1);
+		p(full2);
+		p(mutex2);
+		iorqID[numberInBuffer] = doioID;
+		iorqAddr[numberInBuffer] = doioAddr;	
+		numberInBuffer = (numberInBuffer++) % 5;
+		p(output);	
+		cout << "DOIO assembles IORB for user " << doioID << " and inserts it in IORQ" << endl;
+		v(output);
+		v(mutex2);
+		v(requestPending);
+	}   
+}
+
+void User(int ID) {
+	int count = EMPTY;
+	int tempAddr = EMPTY;
+	for(count = EMPTY; count < BUFFERSIZE2; count++){      
+		tempAddr = random(RANGE + 1);
+		p(full1);
+		p(mutex1);
+		userID = ID;
+		userAddr = tempAddr;
+		p(output);
+		cout << "User " << userID << " executes system call SIO" << endl;
+		v(output);
+		v(mutex1);
+		v(sio);
+		p(requestServiced[userID]);
+	}
+}
+
+void intSystem(){
+	initialsem (mutex1, BUFFERSIZE1);
+	initialsem (mutex2, BUFFERSIZE1);
+	initialsem (mutex3, BUFFERSIZE1);
+	initialsem (output, BUFFERSIZE1);
+	initialsem (full1, BUFFERSIZE1);	
+	initialsem (full2, BUFFERSIZE2);
+	initialsem (full3, BUFFERSIZE1);
+	initialsem (sio, EMPTY);
+	initialsem (pio, EMPTY);
+	initialsem (requestPending, EMPTY);
+	initialsem (operationComplete, EMPTY);
+	initialsem (requestServiced[0], EMPTY);
+	initialsem (requestServiced[1], EMPTY);
+	initialsem (requestServiced[2], EMPTY);
+	initialsem (requestServiced[3], EMPTY);
+	initialsem (requestServiced[4], EMPTY);
+}
+void main () {
+	intSystem();
+	cobegin {
+		User(0); 
+		User(1); 
+		User(2);
+		User(3);
+		User(4);
+		Doio();
+		DeviceDriver();
+		Disk();
+	}
+}
